@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# VoltPath runtime data
+ev_planner.db
+*.db
+*.db-journal
+logs/
+data/exports/*.csv
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+backend/.pip-cache/
+*.tsbuildinfo
+
+# Environment and editors
+.env
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
