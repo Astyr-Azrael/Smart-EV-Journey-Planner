@@ -11,7 +11,7 @@ Run `backend/.venv/Scripts/python -m pytest -q`.
 | Static scraper | Title, links, EV terms and JSON-LD parsing |
 | Route recommendation | Multiple reachable progressive stops |
 | Explainability | Selected stop contains human-readable reasons |
-| Pandas cleaning | Two nearby source records merge into High confidence |
+| Pandas cleaning | Two nearby source records merge without duplicating the station |
 | Normalization | Connector aliases and textual kW values |
 | Validation | Reserve equal to starting battery is rejected |
 
@@ -19,13 +19,15 @@ Run `backend/.venv/Scripts/python -m pytest -q`.
 
 | Scenario | Expected outcome |
 |---|---|
-| Mumbai → Pune, 300 km range, 40% battery, 15% reserve | Charging requirement is evaluated using 75 km usable range; compatible corridor stations shown |
-| Short trip at high charge | No stop required; map and weather still shown |
+| Mumbai → Pune, Tata Nexon.ev 45 | Default route renders and live corridor stations are shown |
+| Mumbai → Bengaluru, Mahindra BE 6 | Long route completes with mapped corridor stations rather than timing out |
+| Short trip at high charge | No stop required; both route styles and map remain visible |
 | Invalid destination | Clear geocoding error; no fabricated route |
 | Reserve ≥ current charge | HTTP 422 validation response |
 | No compatible connector | No feasible stop explanation |
-| Station provider timeout/429 | Other provider used when available, otherwise clear 502 |
-| Weather unavailable | Journey succeeds with weather omitted |
+| Station provider timeout/429 | Another endpoint/cache is used; default road route remains available |
+| No useful route alternative | Default route becomes the highlighted fallback with a clear message |
+| Saved journey arrow | Opens `/journeys/{id}` and renders the saved result |
 | robots.txt disallows crawl | Crawl blocked before content extraction |
 | Private-network URL | Request rejected by SSRF protection |
 | Selenium selector missing | Explicit-wait error is logged and returned cleanly |

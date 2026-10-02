@@ -10,7 +10,7 @@ The scraping lab is isolated from the core journey planner so a third-party page
 
 ## Safety gate
 
-Before static or Selenium extraction, VoltPath:
+Before static or Selenium extraction, the Smart EV Journey Planner backend:
 
 1. accepts only complete HTTP(S) URLs;
 2. resolves the hostname and rejects private, loopback, link-local, reserved and multicast addresses;

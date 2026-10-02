@@ -3,13 +3,21 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export class ApiError extends Error {}
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-  })
-  const body = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new ApiError(body?.detail || `Request failed (${response.status})`)
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 65000)
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: options?.signal || controller.signal,
+      headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) throw new ApiError(body?.detail || `Request failed (${response.status})`)
+    return body as T
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw new ApiError('The live data request timed out. Please try again.')
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
   }
-  return body as T
 }

@@ -2,6 +2,7 @@ from app.services.crawler import parse_page
 from app.services.geo import haversine_km, station_from_element
 from app.services.planner import build_charge_plan
 from app.services.data_cleaner import clean_and_merge, normalize_connector, normalize_power
+from app.services.route_intelligence import choose_charging_friendly_route
 from app.schemas import PlanRequest
 from pydantic import ValidationError
 
@@ -47,14 +48,14 @@ def test_planner_selects_progressive_stop():
 
 
 def test_cleaner_normalizes_and_merges_nearby_sources():
-    base = {"name": "Tata EZ Charge", "operator": "Tata Power", "latitude": 19.076, "longitude": 72.8777, "connectors": ["CCS Combo 2"], "power_kw": "60 kW", "charger_type": "DC", "source_url": "https://example.com/a", "confidence": "Medium", "provenance": {}, "raw_tags": {}}
+    base = {"name": "Tata EZ Charge", "operator": "Tata Power", "latitude": 19.076, "longitude": 72.8777, "connectors": ["CCS Combo 2"], "power_kw": "60 kW", "charger_type": "DC", "source_url": "https://example.com/a", "provenance": {}, "raw_tags": {}}
     records = [
         {**base, "osm_key": "node/1", "source": "OpenStreetMap", "source_id": "node/1"},
         {**base, "osm_key": "ocm/2", "source": "Open Charge Map", "source_id": "2", "latitude": 19.0762, "longitude": 72.8778},
     ]
     cleaned = clean_and_merge(records)
     assert len(cleaned) == 1
-    assert cleaned[0]["confidence"] == "High"
+    assert cleaned[0]["source"] == "Open Charge Map + OpenStreetMap"
     assert cleaned[0]["power_kw"] == 60.0
 
 
@@ -70,3 +71,15 @@ def test_reserve_must_be_less_than_battery():
         pass
     else:
         raise AssertionError("Expected reserve validation error")
+
+
+def test_charging_friendly_route_prefers_reasonable_compatible_alternative():
+    routes = [
+        {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[0, 0], [0.5, 0], [1, 0]]}},
+        {"distance_km": 110, "duration_minutes": 70, "geometry": {"type": "LineString", "coordinates": [[0, 0.05], [0.5, 0.05], [1, 0.05]]}},
+    ]
+    stations = [{"osm_key": "node/7", "latitude": 0.05, "longitude": 0.5, "connectors": ["CCS2"]}]
+    result = choose_charging_friendly_route(routes, stations, "CCS2")
+    assert result["alternative_found"] is True
+    assert result["charging_friendly"]["distance_km"] == 110
+    assert result["charging_friendly"]["compatible_station_count"] == 1

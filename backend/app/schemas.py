@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 class PlanRequest(BaseModel):
     origin: str = Field(min_length=2, max_length=200)
     destination: str = Field(min_length=2, max_length=200)
+    ev_id: str = Field(default="tata-nexon-ev-45", min_length=3, max_length=100)
     vehicle: str = Field(default="Custom EV", max_length=120)
     usable_range_km: float = Field(default=350, ge=60, le=1000)
     start_soc: float = Field(default=85, ge=10, le=100)

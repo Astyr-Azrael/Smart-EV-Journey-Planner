@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     overpass_url: str = "https://overpass-api.de/api/interpreter"
     osrm_url: str = "https://router.project-osrm.org"
     ors_url: str = "https://api.openrouteservice.org/v2/directions/driving-car/geojson"
-    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
     open_charge_map_url: str = "https://api.openchargemap.io/v3/poi"
     open_charge_map_api_key: str | None = None
     ors_api_key: str | None = None

@@ -6,7 +6,7 @@ if (-not (Test-Path $backendPython)) {
     throw "Backend environment not found. Follow the README setup steps in backend/ first."
 }
 
-Write-Host "Starting VoltPath API on http://localhost:8000" -ForegroundColor Green
+Write-Host "Starting Smart EV Journey Planner API on http://localhost:8000" -ForegroundColor Green
 $apiJob = Start-Job -ScriptBlock {
     param($root, $pythonExecutable)
     Set-Location "$root\backend"

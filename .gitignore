@@ -216,7 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-# VoltPath runtime data
+# Smart EV Journey Planner runtime data
 ev_planner.db
 *.db
 *.db-journal

@@ -62,7 +62,6 @@ def clean_and_merge(records: list[dict]) -> list[dict]:
                 match[key] = value
         match["connectors"] = sorted(set((match.get("connectors") or []) + (row.get("connectors") or [])))
         match["source"] = " + ".join(filter(None, sources))
-        match["confidence"] = "High"
         match["provenance"] = {**(match.get("provenance") or {}), **(row.get("provenance") or {})}
     logger.info("Cleaned %s source records into %s unique stations", len(records), len(merged))
     return merged
@@ -85,7 +84,7 @@ def _is_duplicate(a: dict, b: dict) -> bool:
 
 def export_csv(records: list[dict], destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    columns = ["name", "operator", "latitude", "longitude", "connectors", "power_kw", "charger_type", "source", "source_url", "confidence"]
+    columns = ["name", "operator", "latitude", "longitude", "connectors", "power_kw", "charger_type", "source", "source_url"]
     frame = pd.DataFrame(records)
     for column in columns:
         if column not in frame:

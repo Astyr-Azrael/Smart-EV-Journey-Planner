@@ -69,7 +69,6 @@ def station_from_element(element: dict) -> dict | None:
         "country": tags.get("addr:country") or "India",
         "source": "OpenStreetMap",
         "source_id": f"{osm_type}/{osm_id}",
-        "confidence": "Medium" if connectors and (tags.get("operator") or tags.get("brand")) else "Low",
         "provenance": {"coordinates": "OpenStreetMap", "connectors": "OpenStreetMap", "operator": "OpenStreetMap"},
         "source_url": f"https://www.openstreetmap.org/{osm_type}/{osm_id}",
         "raw_tags": tags,
@@ -86,14 +85,14 @@ def _osm_power(tags: dict) -> float | None:
     return None
 
 
-async def _get_json(url: str, *, params: dict | None = None) -> dict | list:
+async def _get_json(url: str, *, params: dict | None = None, timeout_seconds: float | None = None) -> dict | list:
     cache_key = f"GET:{url}:{sorted((params or {}).items())}"
     cached = _CACHE.get(cache_key)
     if cached and cached[0] > time.monotonic():
         return cached[1]
     headers = {"User-Agent": settings.user_agent, "Accept": "application/json"}
     try:
-        async with httpx.AsyncClient(timeout=settings.request_timeout_seconds, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout_seconds or settings.request_timeout_seconds, follow_redirects=True) as client:
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             payload = response.json()
@@ -105,16 +104,24 @@ async def _get_json(url: str, *, params: dict | None = None) -> dict | list:
 
 async def _overpass_json(query: str) -> dict:
     endpoints = [
+        "https://gall.openstreetmap.de/api/interpreter",
         settings.overpass_url,
         "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
     ]
     last_error: Exception | None = None
     for endpoint in dict.fromkeys(endpoints):
         try:
-            payload = await _get_json(endpoint, params={"data": query})
+            cache_key = f"OVERPASS:{query}"
+            cached = _CACHE.get(cache_key)
+            if cached and cached[0] > time.monotonic():
+                return cached[1] if isinstance(cached[1], dict) else {"elements": []}
+            async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+                response = await client.post(endpoint, data={"data": query}, headers={"User-Agent": settings.user_agent, "Accept": "application/json"})
+                response.raise_for_status()
+                payload = response.json()
+                _CACHE[cache_key] = (time.monotonic() + settings.cache_ttl_minutes * 60, payload)
             return payload if isinstance(payload, dict) else {"elements": []}
-        except ExternalServiceError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             last_error = exc
             logger.warning("Overpass endpoint failed (%s): %s", endpoint, exc)
     raise ExternalServiceError(f"All Overpass endpoints were unavailable: {last_error}")
@@ -145,34 +152,27 @@ async def reverse_geocode(lat: float, lon: float) -> str | None:
         return None
 
 
-async def fetch_route(origin: dict, destination: dict) -> dict:
-    if settings.ors_api_key:
-        headers = {"Authorization": settings.ors_api_key, "Content-Type": "application/json", "User-Agent": settings.user_agent}
-        body = {"coordinates": [[origin["longitude"], origin["latitude"]], [destination["longitude"], destination["latitude"]]]}
-        try:
-            async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
-                response = await client.post(settings.ors_url, headers=headers, json=body)
-                response.raise_for_status()
-                feature = response.json()["features"][0]
-                summary = feature["properties"]["summary"]
-                return {"distance_km": round(summary["distance"] / 1000, 1), "duration_minutes": round(summary["duration"] / 60), "geometry": feature["geometry"], "provider": "openrouteservice"}
-        except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
-            logger.warning("openrouteservice failed; falling back to OSRM: %s", exc)
+async def fetch_routes(origin: dict, destination: dict) -> list[dict]:
+    """Return the default OSRM route plus any reasonable road alternatives."""
     coordinates = f"{origin['longitude']},{origin['latitude']};{destination['longitude']},{destination['latitude']}"
     payload = await _get_json(
         f"{settings.osrm_url}/route/v1/driving/{coordinates}",
-        params={"overview": "full", "geometries": "geojson", "steps": "false"},
+        params={"overview": "full", "geometries": "geojson", "steps": "false", "alternatives": "true"},
+        timeout_seconds=20,
     )
     routes = payload.get("routes", []) if isinstance(payload, dict) else []
     if not routes:
         raise ExternalServiceError("No drivable route was returned for these locations")
-    route = routes[0]
-    return {
+    return [{
         "distance_km": round(route["distance"] / 1000, 1),
         "duration_minutes": round(route["duration"] / 60),
         "geometry": route["geometry"],
         "provider": "OSRM",
-    }
+    } for route in routes[:3]]
+
+
+async def fetch_route(origin: dict, destination: dict) -> dict:
+    return (await fetch_routes(origin, destination))[0]
 
 
 async def fetch_stations_bbox(bbox: tuple[float, float, float, float]) -> list[dict]:
@@ -191,37 +191,81 @@ async def fetch_stations_bbox(bbox: tuple[float, float, float, float]) -> list[d
 
 
 async def fetch_stations_near(lat: float, lon: float, radius_km: float) -> list[dict]:
-    lat_delta = radius_km / 111.0
-    lon_delta = radius_km / max(20.0, 111.0 * math.cos(math.radians(lat)))
-    stations = await fetch_stations_bbox((lat - lat_delta, lon - lon_delta, lat + lat_delta, lon + lon_delta))
+    # Around queries are substantially cheaper for public Overpass instances
+    # than scanning a whole city bounding box, especially in dense areas.
+    payload = await _overpass_json(_station_query([[lon, lat]], max(1000, int(radius_km * 1000))))
+    stations = [station for item in payload.get("elements", []) if (station := station_from_element(item))]
     return [item for item in stations if haversine_km((lat, lon), (item["latitude"], item["longitude"])) <= radius_km]
 
 
-async def fetch_stations_corridor(coordinates: list[list[float]], radius_km: float = 22) -> list[dict]:
-    """Query a sampled route corridor instead of a potentially country-sized bbox."""
+def _sample_route_anchors(coordinates: list[list[float]], spacing_km: float = 32) -> list[list[float]]:
     if not coordinates:
         return []
-    sample_count = min(20, len(coordinates))
-    indices = sorted({round(index * (len(coordinates) - 1) / max(1, sample_count - 1)) for index in range(sample_count)})
+    anchors = [coordinates[0]]
+    travelled = 0.0
+    previous = coordinates[0]
+    for point in coordinates[1:]:
+        travelled += haversine_km((previous[1], previous[0]), (point[1], point[0]))
+        if travelled >= spacing_km:
+            anchors.append(point)
+            travelled = 0.0
+        previous = point
+    if anchors[-1] != coordinates[-1]:
+        anchors.append(coordinates[-1])
+    return anchors
+
+
+def _station_query(points: list[list[float]], search_radius_m: int) -> str:
     clauses = []
-    radius_m = round(radius_km * 1000)
-    for index in indices:
-        lon, lat = coordinates[index]
-        clauses.extend(
-            [
-                f'node["amenity"="charging_station"](around:{radius_m},{lat},{lon});',
-                f'way["amenity"="charging_station"](around:{radius_m},{lat},{lon});',
-                f'relation["amenity"="charging_station"](around:{radius_m},{lat},{lon});',
-            ]
-        )
-    query = "[out:json][timeout:45];(" + "".join(clauses) + ");out center tags;"
-    payload = await _overpass_json(query)
+    for lon, lat in points:
+        for element_type in ("node", "way", "relation"):
+            clauses.append(f'{element_type}["amenity"="charging_station"](around:{search_radius_m},{lat:.6f},{lon:.6f});')
+    return "[out:json][timeout:8];(" + "".join(clauses) + ");out center tags;"
+
+
+async def fetch_stations_corridors(route_coordinates: list[list[list[float]]], radius_km: float = 5) -> list[dict]:
+    """Fetch live OSM chargers with small parallel queries, then filter to 5 km later."""
+    anchors: list[list[float]] = []
+    seen: set[tuple[float, float]] = set()
+    for coordinates in route_coordinates:
+        for point in _sample_route_anchors(coordinates):
+            rounded = (round(point[0], 3), round(point[1], 3))
+            if rounded in seen:
+                continue
+            seen.add(rounded)
+            anchors.append(point)
+    if not anchors:
+        return []
+
+    # The generous live-search radius keeps gaps between anchors covered. The
+    # route-intelligence layer still applies the strict 5 km corridor rule.
+    chunks = [anchors[index:index + 4] for index in range(0, len(anchors), 4)]
+    semaphore = asyncio.Semaphore(4)
+
+    async def fetch_chunk(points: list[list[float]]) -> dict:
+        async with semaphore:
+            return await _overpass_json(_station_query(points, max(9000, int(radius_km * 3600))))
+
+    outcomes = await asyncio.gather(*(fetch_chunk(chunk) for chunk in chunks), return_exceptions=True)
     unique: dict[str, dict] = {}
-    for element in payload.get("elements", []):
-        station = station_from_element(element)
-        if station:
-            unique[station["osm_key"]] = station
+    successful_chunks = 0
+    last_error: Exception | None = None
+    for outcome in outcomes:
+        if isinstance(outcome, Exception):
+            last_error = outcome
+            continue
+        successful_chunks += 1
+        for element in outcome.get("elements", []):
+            station = station_from_element(element)
+            if station:
+                unique[station["osm_key"]] = station
+    if not successful_chunks:
+        raise ExternalServiceError(f"All route-corridor station requests failed: {last_error}")
     return list(unique.values())
+
+
+async def fetch_stations_corridor(coordinates: list[list[float]], radius_km: float = 5) -> list[dict]:
+    return await fetch_stations_corridors([coordinates], radius_km)
 
 
 def station_from_ocm(item: dict) -> dict | None:
@@ -261,7 +305,6 @@ def station_from_ocm(item: dict) -> dict | None:
         "country": ((address.get("Country") or {}).get("Title")),
         "source": "Open Charge Map",
         "source_id": str(ocm_id),
-        "confidence": "Medium" if connectors and operator else "Low",
         "provenance": {"coordinates": "Open Charge Map", "connectors": "Open Charge Map", "operator": "Open Charge Map", "power_kw": "Open Charge Map"},
         "source_url": item.get("WebsiteURL") or f"https://openchargemap.io/site/poi/details/{ocm_id}",
         "raw_tags": {"ocm_uuid": item.get("UUID"), "data_provider": (item.get("DataProvider") or {}).get("Title")},
@@ -285,10 +328,11 @@ async def fetch_open_charge_map_bbox(bbox: tuple[float, float, float, float]) ->
     return [station for item in payload if (station := station_from_ocm(item))]
 
 
-async def fetch_multi_source_stations(coordinates: list[list[float]]) -> tuple[list[dict], list[str]]:
+async def fetch_multi_source_stations(route_coordinates: list[list[list[float]]]) -> tuple[list[dict], list[str]]:
     providers = ["OpenStreetMap"]
-    tasks = [fetch_stations_corridor(coordinates)]
-    bbox = route_bbox(coordinates, padding_degrees=0.2)
+    tasks = [fetch_stations_corridors(route_coordinates)]
+    all_coordinates = [point for coordinates in route_coordinates for point in coordinates]
+    bbox = route_bbox(all_coordinates, padding_degrees=0.08)
     if settings.open_charge_map_api_key and (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 20:
         tasks.append(fetch_open_charge_map_bbox(bbox))
         providers.append("Open Charge Map")

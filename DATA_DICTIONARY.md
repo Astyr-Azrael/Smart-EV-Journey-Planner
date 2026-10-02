@@ -15,14 +15,17 @@
 | `access`, `opening_hours`, `status` | nullable text | Source-provided operational metadata |
 | `capacity` | nullable integer | Reported number of bays/points |
 | `source`, `source_id`, `source_url` | text | Record provenance |
-| `confidence` | text | High for cross-source matches; Medium/Low based on completeness |
 | `provenance` | JSON | Field-to-provider mapping |
 | `raw_tags` | JSON | Selected original metadata for audit/debugging |
 | `fetched_at` | timestamp | Retrieval/storage time |
 
 ## `journeys`
 
-Stores normalized origin/destination labels, distance, duration, vehicle label and the complete JSON result containing route geometry, weather, considered stations and explainable stop recommendations.
+Stores normalized origin/destination labels, distance, duration, vehicle label and the complete JSON result containing default/charging-friendly route geometry, considered stations and charging stops.
+
+## `ev_specs`
+
+Stores manufacturer, model, variant, battery, certified range, AC/DC connector, maximum charging power, official source URL and update date used by the frontend dropdown.
 
 ## `crawl_runs`
 
