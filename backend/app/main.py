@@ -21,7 +21,9 @@ from .services.crawler import CrawlSafetyError, inspect_public_page
 from .services.data_cleaner import clean_and_merge, export_csv
 from .services.geo import ExternalServiceError, fetch_multi_source_stations, fetch_routes, fetch_stations_near, geocode, haversine_km
 from .services.planner import build_charge_plan
-from .services.route_intelligence import choose_charging_friendly_route
+from .services.route_intelligence import choose_charging_friendly_route, select_display_stations
+from .services.bee_data import load_bee_stations, stations_near_routes
+from .services.places import suggest_places
 
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -120,6 +122,22 @@ def list_evs(db: Session = Depends(get_db)):
     return [ev_dict(item) for item in rows]
 
 
+@app.get("/api/places/suggest")
+async def place_suggestions(q: str = Query(min_length=2, max_length=100)):
+    return await suggest_places(q)
+
+
+async def optional_live_stations(geometries: list[list[list[float]]], timeout_seconds: float = 7) -> tuple[list[dict], list[str]]:
+    """Keep slow public Overpass servers from blocking an otherwise valid BEE-backed plan."""
+    if settings.demo_mode:
+        return [], []
+    try:
+        return await asyncio.wait_for(fetch_multi_source_stations(geometries), timeout=timeout_seconds)
+    except TimeoutError:
+        logger.warning("Live station enrichment exceeded %.1f seconds; continuing with BEE data", timeout_seconds)
+        return [], []
+
+
 @app.post("/api/crawl/stations")
 async def crawl_stations(payload: CrawlRequest, db: Session = Depends(get_db)):
     try:
@@ -174,16 +192,22 @@ async def plan_journey(payload: PlanRequest, db: Session = Depends(get_db)):
         route_options = await fetch_routes(origin, destination)
     except ExternalServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    geometries = [route["geometry"]["coordinates"] for route in route_options]
+    bee_records = stations_near_routes(load_bee_stations(), geometries)
+    source_names = ["BEE EV Yatra"] if bee_records else []
+    raw_records = list(bee_records)
     try:
-        if settings.demo_mode:
-            raise ExternalServiceError("Demo mode uses the previously collected station cache")
-        geometries = [route["geometry"]["coordinates"] for route in route_options]
-        raw_records, source_names = await fetch_multi_source_stations(geometries)
-        records = clean_and_merge(raw_records)
+        live_records, live_sources = await optional_live_stations(geometries)
+        raw_records.extend(live_records)
+        source_names.extend(live_sources)
     except ExternalServiceError as exc:
-        records = [station_dict(item) for item in db.scalars(select(Station)).all()]
-        source_names = ["SQLite cache"] if records else []
-        logger.warning("Live station sources failed; planning with %s cached records: %s", len(records), exc)
+        cached = [station_dict(item) for item in db.scalars(select(Station)).all()]
+        cached_near_route = stations_near_routes(cached, geometries)
+        raw_records.extend(cached_near_route)
+        if cached_near_route:
+            source_names.append("SQLite cache")
+        logger.warning("Live station sources failed; using BEE data and %s cached route records: %s", len(cached_near_route), exc)
+    records = clean_and_merge(raw_records)
     route_choice = choose_charging_friendly_route(route_options, records, ev.dc_connector)
     route = route_choice["charging_friendly"]
     route_stations = route_choice["charging_stations"]
@@ -206,10 +230,10 @@ async def plan_journey(payload: PlanRequest, db: Session = Depends(get_db)):
     result = {
         "origin": origin, "destination": destination, "route": route, "routes": route_choice,
         "ev": ev_dict(ev),
-        "stations_considered": len(route_stations), "nearby_stations": route_stations[:250],
+        "stations_considered": len(route_stations), "nearby_stations": select_display_stations(route_stations, (origin["latitude"], origin["longitude"]), stops=plan["stops"]),
         "plan": plan, "station_sources": source_names,
         "data_freshness": datetime.now(timezone.utc).isoformat(),
-        "attribution": "Routing © OSRM; map/charging data © OpenStreetMap contributors; optional data © Open Charge Map; geocoding by Nominatim.",
+        "attribution": "Routing © OSRM; charging data © Bureau of Energy Efficiency (EV Yatra), OpenStreetMap contributors and optional Open Charge Map; geocoding by Nominatim. BEE snapshot dated 26 October 2025; verify availability before travel.",
     }
     vehicle_label = f"{ev.manufacturer} {ev.model} {ev.variant}"
     journey = Journey(origin=origin["name"], destination=destination["name"], distance_km=route["distance_km"], duration_minutes=route["duration_minutes"], vehicle=vehicle_label, plan=result)
@@ -256,7 +280,7 @@ def journey_detail(journey_id: int, db: Session = Depends(get_db)):
         fallback_ev = db.scalar(select(EVSpec).order_by(EVSpec.manufacturer, EVSpec.model))
         if fallback_ev:
             plan["ev"] = {**ev_dict(fallback_ev), "manufacturer": row.vehicle, "model": "", "variant": ""}
-    plan["attribution"] = "Routing © OSRM; map/charging data © OpenStreetMap contributors; optional data © Open Charge Map; geocoding by Nominatim."
+    plan.setdefault("attribution", "Routing © OSRM; map/charging data © OpenStreetMap contributors; optional data © Open Charge Map; geocoding by Nominatim.")
     return {**plan, "journey_id": row.id}
 
 
@@ -317,6 +341,7 @@ def analytics(db: Session = Depends(get_db)):
 def sources():
     return {
         "sources": [
+            {"name": "BEE EV Yatra", "role": "Nationwide charger-location and connector snapshot (26 October 2025)", "url": "https://beeindia.gov.in/WriteReadData/RTF1984/EV_PCS_Data_29277.pdf", "method": "Cleaned official PDF export"},
             {"name": "OpenStreetMap Overpass", "role": "Live charger crawl", "url": settings.overpass_url, "method": "REST + Overpass QL"},
             {"name": "Open Charge Map", "role": "Optional second charger source", "url": settings.open_charge_map_url, "method": "Authenticated REST API"},
             {"name": "Nominatim", "role": "Address geocoding", "url": settings.nominatim_url, "method": "REST API"},
@@ -327,5 +352,5 @@ def sources():
             {"name": "Static inspector", "method": "BeautifulSoup + CSS selectors + lxml XPath", "policy": "User-selected public HTML after robots.txt and network safety checks"},
             {"name": "Dynamic inspector", "method": "Selenium + Chrome explicit waits", "policy": "Optional manual demonstration; runs only after the same safety and robots checks"},
         ],
-        "policy": "No bundled sample chargers. Station records are fetched live, cleaned with Pandas, persisted to SQLite/CSV and stored with source provenance.",
+        "policy": "The nationwide BEE EV Yatra snapshot is bundled and merged with live OpenStreetMap and optional Open Charge Map records. Source and connector provenance are retained; availability must be verified with the operator.",
     }

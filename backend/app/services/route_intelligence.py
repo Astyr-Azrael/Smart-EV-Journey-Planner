@@ -1,4 +1,29 @@
-from .geo import distance_to_route_km
+from .geo import distance_to_route_km, haversine_km
+
+
+def select_display_stations(stations: list[dict], origin: tuple[float, float], limit: int = 250, stops: list[dict] | None = None) -> list[dict]:
+    """Keep confirmed car chargers and spread remaining map markers along a trip."""
+    ordered = sorted(stations, key=lambda item: haversine_km(origin, (item["latitude"], item["longitude"])))
+    if len(ordered) <= limit:
+        return ordered
+
+    def sample(items: list[dict], count: int) -> list[dict]:
+        if count <= 0:
+            return []
+        if len(items) <= count:
+            return items
+        if count == 1:
+            return [items[len(items) // 2]]
+        return [items[round(index * (len(items) - 1) / (count - 1))] for index in range(count)]
+
+    stop_keys = {item["osm_key"] for item in (stops or [])}
+    mandatory = [item for item in ordered if item["osm_key"] in stop_keys]
+    available = [item for item in ordered if item["osm_key"] not in stop_keys]
+    remaining = max(0, limit - len(mandatory))
+    compatible = [item for item in available if item.get("compatible") is True]
+    other = [item for item in available if item.get("compatible") is not True]
+    selected = mandatory + (sample(compatible, remaining) if len(compatible) >= remaining else compatible + sample(other, remaining - len(compatible)))
+    return sorted(selected, key=lambda item: haversine_km(origin, (item["latitude"], item["longitude"])))
 
 
 def connector_compatibility(station: dict, connector: str) -> bool | None:
@@ -6,12 +31,19 @@ def connector_compatibility(station: dict, connector: str) -> bool | None:
     if not connectors:
         return None
     wanted = connector.strip().lower()
-    return wanted in {item.strip().lower() for item in connectors}
+    available = {item.strip().lower() for item in connectors}
+    if wanted in available:
+        return True
+    if wanted.startswith("ccs") and "ccs (unspecified)" in available:
+        return None
+    return False
 
 
 def annotate_route(route: dict, stations: list[dict], connector: str, corridor_km: float = 5.0) -> tuple[dict, list[dict]]:
     relevant = []
     for station in stations:
+        if set(station.get("connectors") or []) == {"LEV"}:
+            continue
         deviation = distance_to_route_km(station, route["geometry"]["coordinates"])
         if deviation > corridor_km:
             continue

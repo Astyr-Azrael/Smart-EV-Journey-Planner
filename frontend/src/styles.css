@@ -93,6 +93,12 @@ input:focus, select:focus { border-color: var(--emerald); box-shadow: 0 0 0 4px 
 .input-icon { position: relative; }
 .input-icon svg { position: absolute; left: 14px; top: 15px; width: 20px; }
 .input-icon input { padding-left: 46px; }
+.place-field { display: grid; gap: 8px; min-width: 0; }
+.place-suggestions { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; max-height: 270px; overflow-y: auto; padding: 6px; background: var(--pale); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 30px rgba(0, 85, 65, .16); }
+.place-suggestions button { display: block; width: 100%; padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--emerald-deep); font: inherit; font-weight: 650; text-align: left; cursor: pointer; }
+.place-suggestions button:hover, .place-suggestions button.active { background: var(--emerald-soft); }
+.place-suggestions button:focus-visible { outline: 2px solid var(--emerald); outline-offset: -2px; }
+.place-suggestion-note { margin: 0; padding: 12px; color: var(--emerald-deep); font-size: 13px; line-height: 1.4; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-note { margin: 0; font-size: 12px; line-height: 1.6; opacity: .72; }
 .planner-side { padding: clamp(28px, 4vw, 52px); display: flex; flex-direction: column; justify-content: center; background: var(--emerald-soft); }

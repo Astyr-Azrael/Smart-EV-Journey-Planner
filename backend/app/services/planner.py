@@ -24,7 +24,7 @@ def build_charge_plan(
     leg_limit = max(30.0, usable_range_km - reserve_range)
     remaining_reach = max(20.0, start_range - reserve_range)
     sorted_stations = sorted(
-        ({**station, "progress_km": _progress_km(origin, station, destination, total_km)} for station in stations),
+        ({**station, "progress_km": _progress_km(origin, station, destination, total_km)} for station in stations if station.get("compatible") is True),
         key=lambda item: item["progress_km"],
     )
     stops: list[dict] = []

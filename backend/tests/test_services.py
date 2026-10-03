@@ -2,7 +2,7 @@ from app.services.crawler import parse_page
 from app.services.geo import haversine_km, station_from_element
 from app.services.planner import build_charge_plan
 from app.services.data_cleaner import clean_and_merge, normalize_connector, normalize_power
-from app.services.route_intelligence import choose_charging_friendly_route
+from app.services.route_intelligence import choose_charging_friendly_route, select_display_stations
 from app.schemas import PlanRequest
 from pydantic import ValidationError
 
@@ -28,8 +28,8 @@ def test_html_page_extraction():
 
 def test_planner_selects_progressive_stop():
     stations = [
-        {"name": "A", "latitude": 0.0, "longitude": 1.8, "detour_km": 1},
-        {"name": "B", "latitude": 0.0, "longitude": 3.6, "detour_km": 1},
+        {"name": "A", "latitude": 0.0, "longitude": 1.8, "detour_km": 1, "compatible": True},
+        {"name": "B", "latitude": 0.0, "longitude": 3.6, "detour_km": 1, "compatible": True},
     ]
     plan = build_charge_plan(
         stations=stations,
@@ -83,3 +83,37 @@ def test_charging_friendly_route_prefers_reasonable_compatible_alternative():
     assert result["alternative_found"] is True
     assert result["charging_friendly"]["distance_km"] == 110
     assert result["charging_friendly"]["compatible_station_count"] == 1
+
+
+def test_route_does_not_count_scooter_only_points_as_car_stations():
+    route = {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[73.0, 18.8], [73.05, 18.8], [73.1, 18.8]]}}
+    stations = [
+        {"osm_key": "bee/1", "latitude": 18.8, "longitude": 73.05, "connectors": ["LEV"]},
+        {"osm_key": "bee/2", "latitude": 18.8, "longitude": 73.06, "connectors": ["CCS2"]},
+    ]
+    result = choose_charging_friendly_route([route], stations, "CCS2")
+    assert result["charging_friendly"]["station_count"] == 1
+    assert [station["osm_key"] for station in result["charging_stations"]] == ["bee/2"]
+
+
+def test_unspecified_ccs_is_unknown_compatibility():
+    route = {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[73.0, 18.8]]}}
+    station = {"osm_key": "bee/3", "latitude": 18.8, "longitude": 73.0, "connectors": ["CCS (unspecified)"]}
+    result = choose_charging_friendly_route([route], [station], "CCS2")
+    assert result["charging_stations"][0]["compatible"] is None
+    assert result["charging_friendly"]["unknown_compatibility_count"] == 1
+
+
+def test_map_sample_keeps_compatible_stations_and_spans_route():
+    stations = [{"osm_key": f"bee/{i}", "latitude": 18.8, "longitude": 73 + i * 0.01, "compatible": i in (1, 20, 39)} for i in range(40)]
+    displayed = select_display_stations(stations, (18.8, 73), limit=10)
+    assert len(displayed) == 10
+    assert {"bee/1", "bee/20", "bee/39"}.issubset({station["osm_key"] for station in displayed})
+    assert displayed[0]["longitude"] < 73.1
+    assert displayed[-1]["longitude"] > 73.3
+
+
+def test_map_sample_always_includes_planned_stop():
+    stations = [{"osm_key": f"bee/{i}", "latitude": 18.8, "longitude": 73 + i * 0.01, "compatible": True} for i in range(40)]
+    displayed = select_display_stations(stations, (18.8, 73), limit=10, stops=[stations[17]])
+    assert "bee/17" in {station["osm_key"] for station in displayed}

@@ -1,7 +1,8 @@
-import { ArrowRight, Battery, CarFront, MapPin, Navigation, PlugZap } from 'lucide-react'
+import { ArrowRight, Battery, CarFront, Navigation, PlugZap } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import JourneyResults from '../components/JourneyResults'
+import PlaceField from '../components/PlaceField'
 import { ErrorNotice, Loading } from '../components/Ui'
 import type { EVSpec, JourneyResult } from '../types'
 
@@ -45,8 +46,8 @@ export default function PlannerPage() {
     <section className="planner-layout">
       <form className="glass-card planner-form" onSubmit={submit}>
         <div className="section-head"><div><p className="eyebrow emerald">YOUR JOURNEY</p><h2>Where do you want to go?</h2></div><Navigation /></div>
-        <label>Starting point<div className="input-icon"><MapPin /><input value={form.origin} onChange={(event) => set('origin', event.target.value)} required /></div></label>
-        <label>Destination<div className="input-icon"><MapPin /><input value={form.destination} onChange={(event) => set('destination', event.target.value)} required /></div></label>
+        <PlaceField id="origin-place" label="Starting point" value={form.origin} onChange={(value) => set('origin', value)} />
+        <PlaceField id="destination-place" label="Destination" value={form.destination} onChange={(value) => set('destination', value)} />
         <div className="form-grid">
           <label>Manufacturer<select value={manufacturer} onChange={(event) => changeManufacturer(event.target.value)}>{manufacturers.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>EV model / variant<select value={form.ev_id} onChange={(event) => set('ev_id', event.target.value)}>{visibleEvs.map((item) => <option key={item.ev_id} value={item.ev_id}>{item.model} — {item.variant}</option>)}</select></label>
@@ -54,7 +55,7 @@ export default function PlannerPage() {
           <label>Arrival reserve (%)<input type="number" min="5" max="40" value={form.arrival_soc} onChange={(event) => set('arrival_soc', +event.target.value)} /></label>
         </div>
         <button className="button primary wide" disabled={loading || !selectedEv}>{loading ? 'Finding routes and stations…' : <>Plan my journey <ArrowRight size={18} /></>}</button>
-        <p className="form-note">The backend compares road alternatives and crawls a 5 km charging corridor. Public data may omit live availability or tariffs.</p>
+        <p className="form-note">Plan anywhere in India with the nationwide EV Yatra station data. Live availability and tariffs may be unavailable; confirm a charger before travel.</p>
       </form>
       <aside className="planner-side pale-panel">
         <p className="eyebrow emerald">SELECTED EV</p>
