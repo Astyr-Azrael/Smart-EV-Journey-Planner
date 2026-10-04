@@ -133,7 +133,7 @@ async def geocode(place: str) -> dict:
         wait_for = 1.05 - (time.monotonic() - _LAST_NOMINATIM_REQUEST)
         if wait_for > 0:
             await asyncio.sleep(wait_for)
-        payload = await _get_json(f"{settings.nominatim_url}/search", params={"q": place, "format": "jsonv2", "limit": 1, "addressdetails": 1})
+        payload = await _get_json(f"{settings.nominatim_url}/search", params={"q": place, "format": "jsonv2", "limit": 1, "addressdetails": 1, "countrycodes": "in"})
         _LAST_NOMINATIM_REQUEST = time.monotonic()
     if not payload:
         raise ExternalServiceError(f"Could not find location: {place}")
@@ -358,11 +358,61 @@ def route_bbox(coordinates: Iterable[list[float]], padding_degrees: float = 0.18
 
 
 def distance_to_route_km(station: dict, route_coordinates: list[list[float]]) -> float:
-    point = (station["latitude"], station["longitude"])
+    profile = build_route_profile(route_coordinates)
+    return station_route_position(station, profile)[0]
+
+
+def build_route_profile(route_coordinates: list[list[float]], max_points: int = 1600) -> list[tuple[float, float, float]]:
+    """Downsample a route while retaining cumulative road distance in kilometres."""
     if not route_coordinates:
-        return math.inf
-    stride = max(1, len(route_coordinates) // 160)
-    sampled = route_coordinates[::stride]
-    if sampled[-1] != route_coordinates[-1]:
-        sampled.append(route_coordinates[-1])
-    return min(haversine_km(point, (lat, lon)) for lon, lat in sampled)
+        return []
+    stride = max(1, math.ceil((len(route_coordinates) - 1) / max(max_points - 1, 1)))
+    points = route_coordinates[::stride]
+    if points[-1] != route_coordinates[-1]:
+        points.append(route_coordinates[-1])
+    profile: list[tuple[float, float, float]] = [(points[0][0], points[0][1], 0.0)]
+    cumulative = 0.0
+    for previous, point in zip(points, points[1:]):
+        cumulative += haversine_km((previous[1], previous[0]), (point[1], point[0]))
+        profile.append((point[0], point[1], cumulative))
+    return profile
+
+
+def station_route_position(
+    station: dict,
+    profile: list[tuple[float, float, float]],
+    route_distance_km: float | None = None,
+) -> tuple[float, float]:
+    """Return station deviation and cumulative progress at its closest route segment."""
+    if not profile:
+        return math.inf, 0.0
+    if len(profile) == 1:
+        deviation = haversine_km((station["latitude"], station["longitude"]), (profile[0][1], profile[0][0]))
+        return deviation, 0.0
+
+    station_lat = float(station["latitude"])
+    station_lon = float(station["longitude"])
+    best_distance = math.inf
+    best_progress = 0.0
+    for start, end in zip(profile, profile[1:]):
+        mean_lat = math.radians((start[1] + end[1] + station_lat) / 3)
+        lon_scale = 111.320 * max(math.cos(mean_lat), 0.15)
+        lat_scale = 110.574
+        dx = (end[0] - start[0]) * lon_scale
+        dy = (end[1] - start[1]) * lat_scale
+        px = (station_lon - start[0]) * lon_scale
+        py = (station_lat - start[1]) * lat_scale
+        segment_squared = dx * dx + dy * dy
+        fraction = max(0.0, min(1.0, (px * dx + py * dy) / segment_squared)) if segment_squared else 0.0
+        nearest_x = px - fraction * dx
+        nearest_y = py - fraction * dy
+        distance = math.hypot(nearest_x, nearest_y)
+        if distance < best_distance:
+            best_distance = distance
+            best_progress = start[2] + fraction * (end[2] - start[2])
+
+    profile_distance = profile[-1][2]
+    if route_distance_km is not None and profile_distance > 0:
+        best_progress *= route_distance_km / profile_distance
+    progress_limit = route_distance_km if route_distance_km is not None else best_progress
+    return best_distance, min(progress_limit, best_progress)

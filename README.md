@@ -21,14 +21,14 @@ The visual system uses the supplied light yellow `#F8FFE5` and emerald `#06D6A0`
 - Geocode natural-language places with Nominatim.
 - Request real road alternatives from OSRM.
 - Find official BEE EV Yatra stations anywhere in India, enriched with live Overpass and optional Open Charge Map records.
-- Apply a strict 5 km station-to-route filter.
+- Project stations onto the OSRM road geometry and apply an 8 km station-to-route corridor filter.
 - Highlight the charging-friendly route and keep the normal route visible as a faint comparison.
 - Use the default route when no meaningfully better charging alternative exists.
-- Show mapped stations and useful cards for opening status, tariff, rating, connector, power, compatibility, estimated top-up time/cost and amenities when the source provides them.
+- Show mapped stations with search and compatibility, connector and charging-speed filters, plus useful cards for connector, power, route deviation, compatibility, estimated top-up time and amenities when the source provides them.
 - Preserve saved journeys; journey rows and arrows reopen the complete result.
 - Continue using the official nationwide snapshot and persisted station cache if a live station provider is temporarily unavailable.
 
-Unknown values are shown as unavailable. The app does not invent ratings, tariffs, live occupancy or connector information and does not use AI/confidence/safety scores.
+Unknown values are omitted or clearly marked for confirmation. The app does not invent ratings, tariffs, live occupancy or connector information and does not use AI/confidence/safety scores. Planned stop positions use cumulative road distance, and charging time is labelled as an estimate with its assumptions.
 
 ## Architecture
 

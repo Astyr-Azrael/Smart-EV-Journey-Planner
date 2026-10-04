@@ -187,8 +187,8 @@ async def plan_journey(payload: PlanRequest, db: Session = Depends(get_db)):
     if not ev:
         raise HTTPException(status_code=404, detail="Selected EV specification was not found")
     try:
-        origin = await geocode(payload.origin)
-        destination = await geocode(payload.destination)
+        origin = {"name": payload.origin, "latitude": payload.origin_latitude, "longitude": payload.origin_longitude} if payload.origin_latitude is not None else await geocode(payload.origin)
+        destination = {"name": payload.destination, "latitude": payload.destination_latitude, "longitude": payload.destination_longitude} if payload.destination_latitude is not None else await geocode(payload.destination)
         route_options = await fetch_routes(origin, destination)
     except ExternalServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

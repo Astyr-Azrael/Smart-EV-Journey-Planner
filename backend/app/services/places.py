@@ -50,6 +50,13 @@ async def suggest_places(query: str) -> list[dict]:
             suggestions.append({"label": label, "latitude": float(coordinates[1]), "longitude": float(coordinates[0])})
             if len(suggestions) == 6:
                 break
+        for local in _local_suggestions(query):
+            if local["label"].casefold() in seen:
+                continue
+            seen.add(local["label"].casefold())
+            suggestions.append(local)
+            if len(suggestions) == 8:
+                break
         if suggestions:
             return suggestions
     except (ExternalServiceError, KeyError, TypeError, ValueError) as exc:

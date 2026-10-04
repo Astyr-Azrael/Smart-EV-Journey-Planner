@@ -1,4 +1,5 @@
-import { ArrowRight, BatteryCharging, Check, Clock3, ExternalLink, Gauge, MapPin, MapPinned, Navigation, PlugZap, Route } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, BatteryCharging, Check, Clock3, ExternalLink, Gauge, MapPin, MapPinned, Navigation, PlugZap, Route, Search, X } from 'lucide-react'
 import RouteMap from './RouteMap'
 import { Chip, Empty } from './Ui'
 import type { JourneyResult, RouteOption, Station } from '../types'
@@ -51,9 +52,10 @@ function JourneyItinerary({ result }: { result: JourneyResult }) {
       {!result.plan.feasible ? <p className="plan-warning">{result.plan.reason}</p> : null}
       <div className="itinerary-track">
         <div className="itinerary-step"><span className="step-dot">A</span><div><small>Start · {startSoc ?? '—'}% battery</small><strong>{result.origin.name.split(',')[0]}</strong></div></div>
-        {stops.map((stop, index) => <div className="itinerary-step itinerary-charge" key={stop.osm_key}><span className="step-dot">{index + 1}</span><div><small>Charge stop {index + 1} · after {Math.round(stop.progress_km || 0)} km</small><strong>{stop.name}</strong><p>Arrive near {stop.arrival_soc}% · charge to {stop.target_soc}% · about {stop.charge_minutes} min</p></div></div>)}
+        {stops.map((stop, index) => <div className="itinerary-step itinerary-charge" key={stop.osm_key}><span className="step-dot">{index + 1}</span><div><small>Estimated stop {index + 1} · route km {Math.round(stop.progress_km || 0)}</small><strong>{stop.name}</strong><p>Drive {Math.round(stop.leg_distance_km || 0)} km from the previous point. Estimated arrival {stop.arrival_soc}% · charge to {stop.target_soc}% · about {stop.charge_minutes} min.</p></div></div>)}
         <div className="itinerary-step"><span className="step-dot">B</span><div><small>Destination · keep {arrivalSoc ?? '—'}% reserve</small><strong>{result.destination.name.split(',')[0]}</strong>{!stops.length && result.plan.feasible ? <p>No charging stop is needed at this starting battery level.</p> : null}</div></div>
       </div>
+      {result.plan.calculation_note ? <p className="calculation-note">{result.plan.calculation_note}</p> : null}
       {stops.length > 3 ? <p className="navigation-note">Some mobile browsers limit Google Maps links to three waypoints. The full numbered stop plan remains visible on this map.</p> : null}
     </section>
   )
@@ -73,7 +75,7 @@ function StationCard({ station, evName, stopNumber }: { station: Station; evName
         <a href={station.source_url} target="_blank" rel="noreferrer" aria-label={`Open source for ${station.name}`}><ArrowRight /></a>
       </div>
       <p className="station-address"><MapPin />{station.address || `${station.latitude.toFixed(4)}, ${station.longitude.toFixed(4)}`}</p>
-      {stopNumber ? <p className="stop-callout"><Navigation />Driver stop {stopNumber}: arrive near {station.arrival_soc}% and charge to {station.target_soc}% in about {station.charge_minutes} min.</p> : null}
+      {stopNumber ? <p className="stop-callout"><Navigation />Estimated stop {stopNumber} at route km {Math.round(station.progress_km || 0)}: arrive near {station.arrival_soc}%, then charge to {station.target_soc}% in about {station.charge_minutes} min.</p> : null}
       <div className="station-facts">
         <div><Route /><span><small>Route deviation</small><strong>{station.detour_km ?? '—'} km</strong></span></div>
         <div><Gauge /><span><small>{station.power_kw ? 'Charging power' : 'Connector options'}</small><strong>{station.power_kw ? `${station.power_kw} kW` : `${station.connectors.length || 0} listed`}</strong></span></div>
@@ -88,11 +90,41 @@ function StationCard({ station, evName, stopNumber }: { station: Station; evName
 }
 
 export default function JourneyResults({ result }: { result: JourneyResult }) {
+  const [stationQuery, setStationQuery] = useState('')
+  const [compatibilityFilter, setCompatibilityFilter] = useState('all')
+  const [connectorFilter, setConnectorFilter] = useState('all')
+  const [speedFilter, setSpeedFilter] = useState('all')
   const evName = `${result.ev.manufacturer} ${result.ev.model}`
   const plannedStops = [...result.plan.stops].sort((a, b) => (a.progress_km || 0) - (b.progress_km || 0))
   const stopIndex = new Map(plannedStops.map((stop, index) => [stop.osm_key, index + 1]))
   const plannedKeys = new Set(plannedStops.map((stop) => stop.osm_key))
   const displayStations = [...plannedStops, ...result.nearby_stations.filter((station) => !plannedKeys.has(station.osm_key))]
+  const connectorOptions = [...new Set(displayStations.flatMap((station) => station.connectors))].sort()
+  const filteredStations = (() => {
+    const query = stationQuery.trim().toLocaleLowerCase()
+    return displayStations.filter((station) => {
+      const searchable = [station.name, station.address, station.operator, station.city, station.state, station.source].filter(Boolean).join(' ').toLocaleLowerCase()
+      if (query && !searchable.includes(query)) return false
+      if (compatibilityFilter === 'planned' && !plannedKeys.has(station.osm_key)) return false
+      if (compatibilityFilter === 'compatible' && station.compatible !== true) return false
+      if (compatibilityFilter === 'confirm' && (station.compatible === true || station.compatible === false)) return false
+      if (connectorFilter !== 'all' && !station.connectors.includes(connectorFilter)) return false
+      const power = station.power_kw
+      if (speedFilter === 'rapid' && (!power || power < 50)) return false
+      if (speedFilter === 'fast' && (!power || power < 20 || power >= 50)) return false
+      if (speedFilter === 'standard' && (!power || power >= 20)) return false
+      if (speedFilter === 'unknown' && power) return false
+      return true
+    })
+  })()
+  const filtersActive = Boolean(stationQuery || compatibilityFilter !== 'all' || connectorFilter !== 'all' || speedFilter !== 'all')
+
+  function clearFilters() {
+    setStationQuery('')
+    setCompatibilityFilter('all')
+    setConnectorFilter('all')
+    setSpeedFilter('all')
+  }
 
   return (
     <section className="result-stack">
@@ -108,7 +140,17 @@ export default function JourneyResults({ result }: { result: JourneyResult }) {
       <JourneyItinerary result={result} />
       <section className="stations-section">
         <div className="section-head"><div><p className="eyebrow emerald">ALONG YOUR ROUTE</p><h2>Charging stations</h2><p className="section-support">Numbered green cards are stops added to your driving directions.</p></div><span className="source-note">{result.station_sources?.join(' + ') || 'Station source unavailable'}{result.stations_considered > result.nearby_stations.length ? ` · Showing ${result.nearby_stations.length} of ${result.stations_considered}` : ''}</span></div>
-        {displayStations.length ? <div className="station-detail-grid">{displayStations.map((station) => <StationCard key={station.osm_key} station={station} evName={evName} stopNumber={stopIndex.get(station.osm_key)} />)}</div> : <Empty>No charging stations were returned for this corridor. The default route is still available above.</Empty>}
+        {displayStations.length ? <>
+          <div className="station-tools" aria-label="Charging station filters">
+            <label className="station-search"><span>Search stations</span><div className="input-icon"><Search /><input type="search" value={stationQuery} onChange={(event) => setStationQuery(event.target.value)} placeholder="Name, operator, city or address" /></div></label>
+            <label><span>Compatibility</span><select value={compatibilityFilter} onChange={(event) => setCompatibilityFilter(event.target.value)}><option value="all">All stations</option><option value="planned">Planned stops</option><option value="compatible">Confirmed compatible</option><option value="confirm">Connector to confirm</option></select></label>
+            <label><span>Connector</span><select value={connectorFilter} onChange={(event) => setConnectorFilter(event.target.value)}><option value="all">All connectors</option>{connectorOptions.map((connector) => <option key={connector} value={connector}>{connector}</option>)}</select></label>
+            <label><span>Charging speed</span><select value={speedFilter} onChange={(event) => setSpeedFilter(event.target.value)}><option value="all">Any speed</option><option value="rapid">Rapid · 50+ kW</option><option value="fast">Fast · 20–49 kW</option><option value="standard">Standard · under 20 kW</option><option value="unknown">Power not listed</option></select></label>
+            {filtersActive ? <button type="button" className="clear-filters" onClick={clearFilters}><X /> Clear</button> : null}
+          </div>
+          <p className="filter-result-count">Showing {filteredStations.length} of {displayStations.length} stations</p>
+          {filteredStations.length ? <div className="station-detail-grid">{filteredStations.map((station) => <StationCard key={station.osm_key} station={station} evName={evName} stopNumber={stopIndex.get(station.osm_key)} />)}</div> : <Empty>No charging stations match these filters. Clear one or more filters to see the full corridor list.</Empty>}
+        </> : <Empty>No charging stations were returned for this corridor. The default route is still available above.</Empty>}
       </section>
       <p className="attribution">{result.attribution}</p>
     </section>

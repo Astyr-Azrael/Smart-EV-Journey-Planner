@@ -47,6 +47,6 @@ def test_planner_does_not_select_known_incompatible_charger():
         {"name": "Scooter only", "latitude": 0.0, "longitude": 1.8, "detour_km": 1, "compatible": False},
         {"name": "Car charger", "latitude": 0.0, "longitude": 1.9, "detour_km": 1, "compatible": True},
     ]
-    plan = build_charge_plan(stations=stations, origin=(0, 0), destination=(0, 4), total_km=440, usable_range_km=300, start_soc=90, arrival_soc=15, battery_kwh=60, consumption_kwh_100km=17)
+    plan = build_charge_plan(stations=stations, origin=(0, 0), destination=(0, 4), total_km=428, usable_range_km=300, start_soc=90, arrival_soc=15, battery_kwh=60, consumption_kwh_100km=17)
     assert plan["feasible"] is True
     assert plan["stops"][0]["name"] == "Car charger"

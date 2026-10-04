@@ -5,7 +5,7 @@ import { api } from '../api'
 
 type Place = { label: string; latitude: number; longitude: number }
 
-export default function PlaceField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+export default function PlaceField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string, place?: Place) => void }) {
   const [focused, setFocused] = useState(false)
   const [suggestions, setSuggestions] = useState<Place[]>([])
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -32,7 +32,7 @@ export default function PlaceField({ id, label, value, onChange }: { id: string;
 
   function select(place: Place) {
     selectedLabel.current = place.label
-    onChange(place.label)
+    onChange(place.label, place)
     setOpen(false)
     setActiveIndex(-1)
   }

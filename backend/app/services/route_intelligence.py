@@ -1,4 +1,4 @@
-from .geo import distance_to_route_km, haversine_km
+from .geo import build_route_profile, haversine_km, station_route_position
 
 
 def select_display_stations(stations: list[dict], origin: tuple[float, float], limit: int = 250, stops: list[dict] | None = None) -> list[dict]:
@@ -39,17 +39,19 @@ def connector_compatibility(station: dict, connector: str) -> bool | None:
     return False
 
 
-def annotate_route(route: dict, stations: list[dict], connector: str, corridor_km: float = 5.0) -> tuple[dict, list[dict]]:
+def annotate_route(route: dict, stations: list[dict], connector: str, corridor_km: float = 8.0) -> tuple[dict, list[dict]]:
     relevant = []
+    profile = build_route_profile(route["geometry"]["coordinates"])
     for station in stations:
         if set(station.get("connectors") or []) == {"LEV"}:
             continue
-        deviation = distance_to_route_km(station, route["geometry"]["coordinates"])
+        deviation, progress = station_route_position(station, profile, route["distance_km"])
         if deviation > corridor_km:
             continue
         relevant.append({
             **station,
             "detour_km": round(deviation, 1),
+            "progress_km": round(progress, 1),
             "compatible": connector_compatibility(station, connector),
         })
     compatible = sum(item["compatible"] is True for item in relevant)

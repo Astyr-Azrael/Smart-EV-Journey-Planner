@@ -27,6 +27,7 @@ export type Station = {
   charge_minutes?: number
   energy_kwh?: number
   effective_charge_kw?: number
+  leg_distance_km?: number
   compatible?: boolean | null
   opening_status?: string
   tariff?: string | null
@@ -76,6 +77,7 @@ export type JourneyResult = {
     drive_energy_kwh?: number
     charging_minutes?: number
     estimated_cost_inr?: number
+    calculation_note?: string
   }
   trip_settings?: {
     start_soc: number

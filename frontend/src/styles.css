@@ -152,9 +152,17 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .itinerary-step p { margin: 2px 0 0; font-size: 11px; line-height: 1.5; opacity: .76; }
 .itinerary-charge { background: var(--emerald-soft); border-color: var(--emerald); }
 .step-dot { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: var(--pale); background: var(--emerald-deep); font-size: 12px; font-weight: 800; }
-.plan-warning, .navigation-note { margin: 0; padding: 13px 15px; border-radius: 14px; background: var(--emerald-soft); border: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+.plan-warning, .navigation-note, .calculation-note { margin: 0; padding: 13px 15px; border-radius: 14px; background: var(--emerald-soft); border: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+.calculation-note { background: var(--pale-soft); }
 .stations-section { display: grid; gap: 18px; padding-top: 8px; }
 .section-support { margin: 8px 0 0; font-size: 13px; opacity: .72; }
+.station-tools { padding: 16px; display: grid; grid-template-columns: minmax(240px, 1.6fr) repeat(3, minmax(150px, 1fr)) auto; gap: 12px; align-items: end; border: 1px solid var(--line); border-radius: 22px; background: var(--emerald-soft); }
+.station-tools label { min-width: 0; display: grid; gap: 7px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.station-tools input, .station-tools select { min-height: 46px; background: var(--pale); font-size: 12px; letter-spacing: 0; text-transform: none; }
+.station-tools .input-icon svg { top: 13px; }
+.clear-filters { min-height: 46px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: var(--emerald-deep); background: var(--pale); border: 1px solid var(--line); border-radius: 14px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.clear-filters svg { width: 15px; }
+.filter-result-count { margin: -7px 2px 0; font-size: 11px; font-weight: 700; opacity: .68; }
 .station-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .station-detail-card { padding: 22px; align-self: start; background: var(--pale-soft); }
 .planned-stop-card { background: linear-gradient(145deg, var(--emerald-soft), var(--pale)); border: 2px solid var(--emerald); box-shadow: 0 22px 48px rgba(4,120,94,.16); }
@@ -222,6 +230,7 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
   .planner-side { min-height: 420px; }
   .source-grid { grid-template-columns: 1fr 1fr; }
   .route-options { grid-template-columns: 1fr; }
+  .station-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -239,7 +248,7 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
   .menu-button { width: 42px; height: 42px; margin-right: 14px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 13px; color: var(--emerald-deep); background: var(--emerald-soft); }
   .topbar { min-height: 92px; padding: 18px; }
   .page { padding: 22px 15px 44px; }
-  .form-grid, .result-summary, .station-detail-grid, .source-grid, .scraping-methods, .data-policy ul { grid-template-columns: 1fr; }
+  .form-grid, .result-summary, .station-detail-grid, .source-grid, .scraping-methods, .data-policy ul, .station-tools { grid-template-columns: 1fr; }
   .route-option { align-items: flex-start; flex-direction: column; gap: 20px; }
   .itinerary-head { align-items: flex-start; flex-direction: column; }
   .large-map, .network-map { height: 500px; }

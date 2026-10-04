@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from pathlib import Path
 
@@ -50,11 +51,21 @@ def clean_and_merge(records: list[dict]) -> list[dict]:
     frame = frame.drop_duplicates(subset=["source", "source_id"], keep="last")
     rows = frame.to_dict(orient="records")
     merged: list[dict] = []
+    spatial_index: dict[tuple[int, int], list[dict]] = {}
+    cell_degrees = 0.002
     for row in rows:
         row = {key: _none_if_na(value) for key, value in row.items()}
-        match = next((candidate for candidate in merged if _is_duplicate(candidate, row)), None)
+        row_cell = (math.floor(row["latitude"] / cell_degrees), math.floor(row["longitude"] / cell_degrees))
+        nearby_candidates = (
+            candidate
+            for latitude_offset in (-1, 0, 1)
+            for longitude_offset in (-1, 0, 1)
+            for candidate in spatial_index.get((row_cell[0] + latitude_offset, row_cell[1] + longitude_offset), [])
+        )
+        match = next((candidate for candidate in nearby_candidates if _is_duplicate(candidate, row)), None)
         if not match:
             merged.append(row)
+            spatial_index.setdefault(row_cell, []).append(row)
             continue
         sources = sorted(set(str(match.get("source", "")).split(" + ") + str(row.get("source", "")).split(" + ")))
         for key, value in row.items():

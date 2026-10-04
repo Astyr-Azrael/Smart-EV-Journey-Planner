@@ -2,6 +2,8 @@ from .geo import haversine_km
 
 
 def _progress_km(origin: tuple[float, float], station: dict, destination: tuple[float, float], total_km: float) -> float:
+    if station.get("progress_km") is not None:
+        return min(total_km, max(0.0, float(station["progress_km"])))
     direct_total = max(haversine_km(origin, destination), 0.1)
     direct_progress = haversine_km(origin, (station["latitude"], station["longitude"]))
     return min(total_km, total_km * direct_progress / direct_total)
@@ -20,10 +22,12 @@ def build_charge_plan(
     consumption_kwh_100km: float,
     max_charge_kw: float | None = None,
 ) -> dict:
+    calculation_note = "Planning estimate using cumulative OSRM road distance, 80% of certified vehicle range, published charger power and an 8-minute charging overhead. Confirm live access and performance with the operator."
+    drive_energy = round(total_km * consumption_kwh_100km / 100, 1)
     start_range = usable_range_km * start_soc / 100
     reserve_range = usable_range_km * arrival_soc / 100
-    leg_limit = max(30.0, usable_range_km - reserve_range)
-    remaining_reach = max(20.0, start_range - reserve_range)
+    departure_range = start_range
+    remaining_reach = max(20.0, departure_range - reserve_range)
     sorted_stations = sorted(
         ({**station, "progress_km": _progress_km(origin, station, destination, total_km)} for station in stations if station.get("compatible") is True),
         key=lambda item: item["progress_km"],
@@ -31,7 +35,7 @@ def build_charge_plan(
     stops: list[dict] = []
     current = 0.0
     while total_km - current > remaining_reach:
-        lower = current + max(12, remaining_reach * 0.48)
+        lower = current + max(8, remaining_reach * 0.25)
         upper = current + remaining_reach
         candidates = [station for station in sorted_stations if lower <= station["progress_km"] <= upper]
         if not candidates:
@@ -39,11 +43,15 @@ def build_charge_plan(
                 "feasible": False,
                 "reason": "No mapped charger was found inside the safe driving window. Increase range, raise start charge, or inspect stations near the route.",
                 "stops": stops,
+                "drive_energy_kwh": drive_energy,
+                "charging_minutes": sum(stop["charge_minutes"] for stop in stops),
+                "estimated_cost_inr": round(drive_energy * 15.5),
+                "calculation_note": calculation_note,
             }
-        selected = max(candidates, key=lambda item: (item["progress_km"], item.get("power_kw") or 0, -item.get("detour_km", 0)))
+        selected = max(candidates, key=lambda item: (item["progress_km"] - 2 * item.get("detour_km", 0), item.get("power_kw") or 0))
         leg_km = selected["progress_km"] - current
-        arrival = max(5, round(100 * (remaining_reach + reserve_range - leg_km) / usable_range_km))
-        target_soc = min(90, max(70, round(100 * min(leg_limit + reserve_range, usable_range_km) / usable_range_km)))
+        arrival = max(5, round(100 * (departure_range - leg_km) / usable_range_km))
+        target_soc = 90
         energy = max(4.0, battery_kwh * (target_soc - arrival) / 100)
         reported_power = selected.get("power_kw") or max_charge_kw or 60
         effective_power = min(reported_power, max_charge_kw) if max_charge_kw else reported_power
@@ -57,13 +65,13 @@ def build_charge_plan(
             reasons.append(f"supports {', '.join(selected['connectors'][:2])}")
         if selected.get("power_kw"):
             reasons.append(f"reports up to {selected['power_kw']:g} kW")
-        stops.append({**selected, "category": "Planned charging stop", "recommendation_reasons": reasons, "arrival_soc": arrival, "target_soc": target_soc, "charge_minutes": charge_minutes, "energy_kwh": round(energy, 1), "effective_charge_kw": round(effective_power, 1)})
+        stops.append({**selected, "category": "Planned charging stop", "recommendation_reasons": reasons, "arrival_soc": arrival, "target_soc": target_soc, "charge_minutes": charge_minutes, "energy_kwh": round(energy, 1), "effective_charge_kw": round(effective_power, 1), "leg_distance_km": round(leg_km, 1)})
         current = selected["progress_km"]
-        remaining_reach = leg_limit
+        departure_range = usable_range_km * target_soc / 100
+        remaining_reach = max(20.0, departure_range - reserve_range)
         sorted_stations = [station for station in sorted_stations if station["progress_km"] > current + 8]
         if len(stops) > 10:
             break
-    drive_energy = round(total_km * consumption_kwh_100km / 100, 1)
     return {
         "feasible": True,
         "reason": None,
@@ -71,4 +79,5 @@ def build_charge_plan(
         "drive_energy_kwh": drive_energy,
         "charging_minutes": sum(stop["charge_minutes"] for stop in stops),
         "estimated_cost_inr": round(drive_energy * 15.5),
+        "calculation_note": calculation_note,
     }

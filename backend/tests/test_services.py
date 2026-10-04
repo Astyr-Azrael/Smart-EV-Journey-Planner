@@ -1,8 +1,8 @@
 from app.services.crawler import parse_page
-from app.services.geo import haversine_km, station_from_element
+from app.services.geo import build_route_profile, haversine_km, station_from_element, station_route_position
 from app.services.planner import build_charge_plan
 from app.services.data_cleaner import clean_and_merge, normalize_connector, normalize_power
-from app.services.route_intelligence import choose_charging_friendly_route, select_display_stations
+from app.services.route_intelligence import annotate_route, choose_charging_friendly_route, select_display_stations
 from app.schemas import PlanRequest
 from pydantic import ValidationError
 
@@ -50,6 +50,68 @@ def test_planner_selects_progressive_stop():
     assert plan["stops"][0]["charge_minutes"] > 8
 
 
+def test_route_progress_uses_road_geometry_not_radial_distance():
+    coordinates = [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+    profile = build_route_profile(coordinates, max_points=10)
+    deviation, progress = station_route_position(
+        {"latitude": 0.75, "longitude": 0.01},
+        profile,
+        route_distance_km=222.4,
+    )
+    assert deviation < 2
+    assert 80 < progress < 90
+
+
+def test_annotated_station_keeps_cumulative_route_progress():
+    route = {"distance_km": 222.4, "duration_minutes": 180, "geometry": {"type": "LineString", "coordinates": [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0]]}}
+    stations = [{"osm_key": "test/1", "latitude": 0.75, "longitude": 0.01, "connectors": ["CCS2"]}]
+    _, relevant = annotate_route(route, stations, "CCS2")
+    assert len(relevant) == 1
+    assert 80 < relevant[0]["progress_km"] < 90
+
+
+def test_planner_respects_ninety_percent_departure_after_charge():
+    stations = [
+        {"name": "First", "latitude": 0.0, "longitude": 1.0, "progress_km": 200, "detour_km": 1, "compatible": True},
+        {"name": "Second", "latitude": 0.0, "longitude": 2.0, "progress_km": 420, "detour_km": 1, "compatible": True},
+    ]
+    plan = build_charge_plan(
+        stations=stations,
+        origin=(0.0, 0.0),
+        destination=(0.0, 5.0),
+        total_km=500,
+        usable_range_km=300,
+        start_soc=90,
+        arrival_soc=15,
+        battery_kwh=60,
+        consumption_kwh_100km=17,
+        max_charge_kw=80,
+    )
+    assert plan["feasible"] is True
+    assert [stop["progress_km"] for stop in plan["stops"]] == [200, 420]
+    assert plan["stops"][1]["leg_distance_km"] == 220
+    assert plan["stops"][1]["arrival_soc"] == 17
+
+
+def test_incomplete_plan_keeps_estimates_and_explains_assumptions():
+    plan = build_charge_plan(
+        stations=[],
+        origin=(0.0, 0.0),
+        destination=(0.0, 5.0),
+        total_km=500,
+        usable_range_km=300,
+        start_soc=90,
+        arrival_soc=15,
+        battery_kwh=60,
+        consumption_kwh_100km=17,
+        max_charge_kw=80,
+    )
+    assert plan["feasible"] is False
+    assert plan["charging_minutes"] == 0
+    assert plan["drive_energy_kwh"] == 85
+    assert "estimate" in plan["calculation_note"].lower()
+
+
 def test_cleaner_normalizes_and_merges_nearby_sources():
     base = {"name": "Tata EZ Charge", "operator": "Tata Power", "latitude": 19.076, "longitude": 72.8777, "connectors": ["CCS Combo 2"], "power_kw": "60 kW", "charger_type": "DC", "source_url": "https://example.com/a", "provenance": {}, "raw_tags": {}}
     records = [
@@ -76,9 +138,18 @@ def test_reserve_must_be_less_than_battery():
         raise AssertionError("Expected reserve validation error")
 
 
+def test_place_coordinates_must_be_provided_as_pairs():
+    try:
+        PlanRequest(origin="Delhi", destination="Jaipur", origin_latitude=28.61)
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("Expected coordinate pair validation error")
+
+
 def test_charging_friendly_route_prefers_reasonable_compatible_alternative():
     routes = [
-        {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[0, 0], [0.5, 0], [1, 0]]}},
+        {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[0, 0.2], [0.5, 0.2], [1, 0.2]]}},
         {"distance_km": 110, "duration_minutes": 70, "geometry": {"type": "LineString", "coordinates": [[0, 0.05], [0.5, 0.05], [1, 0.05]]}},
     ]
     stations = [{"osm_key": "node/7", "latitude": 0.05, "longitude": 0.5, "connectors": ["CCS2"]}]

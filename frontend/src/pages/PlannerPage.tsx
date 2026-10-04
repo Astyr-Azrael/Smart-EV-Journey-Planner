@@ -6,7 +6,7 @@ import PlaceField from '../components/PlaceField'
 import { ErrorNotice, Loading } from '../components/Ui'
 import type { EVSpec, JourneyResult } from '../types'
 
-const defaults = { origin: 'Mumbai', destination: 'Pune', ev_id: 'tata-nexon-ev-45', start_soc: 85, arrival_soc: 15 }
+const defaults = { origin: 'Mumbai', destination: 'Pune', origin_latitude: null as number | null, origin_longitude: null as number | null, destination_latitude: null as number | null, destination_longitude: null as number | null, ev_id: 'tata-nexon-ev-45', start_soc: 85, arrival_soc: 15 }
 
 export default function PlannerPage() {
   const [form, setForm] = useState(defaults)
@@ -15,7 +15,13 @@ export default function PlannerPage() {
   const [result, setResult] = useState<JourneyResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const set = (key: string, value: string | number) => setForm((state) => ({ ...state, [key]: value }))
+  const set = (key: string, value: string | number | null) => setForm((state) => ({ ...state, [key]: value }))
+  const setPlace = (key: 'origin' | 'destination', value: string, place?: { latitude: number; longitude: number }) => setForm((state) => ({
+    ...state,
+    [key]: value,
+    [`${key}_latitude`]: place?.latitude ?? null,
+    [`${key}_longitude`]: place?.longitude ?? null,
+  }))
 
   useEffect(() => {
     api<EVSpec[]>('/api/evs').then((rows) => {
@@ -46,8 +52,8 @@ export default function PlannerPage() {
     <section className="planner-layout">
       <form className="glass-card planner-form" onSubmit={submit}>
         <div className="section-head"><div><p className="eyebrow emerald">YOUR JOURNEY</p><h2>Where do you want to go?</h2></div><Navigation /></div>
-        <PlaceField id="origin-place" label="Starting point" value={form.origin} onChange={(value) => set('origin', value)} />
-        <PlaceField id="destination-place" label="Destination" value={form.destination} onChange={(value) => set('destination', value)} />
+        <PlaceField id="origin-place" label="Starting point" value={form.origin} onChange={(value, place) => setPlace('origin', value, place)} />
+        <PlaceField id="destination-place" label="Destination" value={form.destination} onChange={(value, place) => setPlace('destination', value, place)} />
         <div className="form-grid">
           <label>Manufacturer<select value={manufacturer} onChange={(event) => changeManufacturer(event.target.value)}>{manufacturers.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>EV model / variant<select value={form.ev_id} onChange={(event) => set('ev_id', event.target.value)}>{visibleEvs.map((item) => <option key={item.ev_id} value={item.ev_id}>{item.model} — {item.variant}</option>)}</select></label>
