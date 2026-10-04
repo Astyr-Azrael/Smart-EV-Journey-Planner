@@ -147,6 +147,29 @@ def test_place_coordinates_must_be_provided_as_pairs():
         raise AssertionError("Expected coordinate pair validation error")
 
 
+def test_high_arrival_reserve_is_allowed_below_starting_charge():
+    request = PlanRequest(origin="Delhi", destination="Jaipur", start_soc=100, arrival_soc=90)
+    assert request.arrival_soc == 90
+
+
+def test_planner_charges_above_a_high_arrival_reserve():
+    plan = build_charge_plan(
+        stations=[{"name": "High reserve stop", "latitude": 0.0, "longitude": 0.25, "progress_km": 30, "detour_km": 0.2, "compatible": True, "power_kw": 60}],
+        origin=(0.0, 0.0),
+        destination=(0.0, 0.5),
+        total_km=60,
+        usable_range_km=400,
+        start_soc=100,
+        arrival_soc=90,
+        battery_kwh=60,
+        consumption_kwh_100km=17,
+        max_charge_kw=80,
+    )
+    assert plan["feasible"] is True
+    assert plan["stops"][0]["target_soc"] == 100
+    assert plan["stops"][0]["arrival_soc"] >= 90
+
+
 def test_charging_friendly_route_prefers_reasonable_compatible_alternative():
     routes = [
         {"distance_km": 100, "duration_minutes": 60, "geometry": {"type": "LineString", "coordinates": [[0, 0.2], [0.5, 0.2], [1, 0.2]]}},

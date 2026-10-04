@@ -6,7 +6,7 @@ import PlaceField from '../components/PlaceField'
 import { ErrorNotice, Loading } from '../components/Ui'
 import type { EVSpec, JourneyResult } from '../types'
 
-const defaults = { origin: 'Mumbai', destination: 'Pune', origin_latitude: null as number | null, origin_longitude: null as number | null, destination_latitude: null as number | null, destination_longitude: null as number | null, ev_id: 'tata-nexon-ev-45', start_soc: 85, arrival_soc: 15 }
+const defaults = { origin: 'Mumbai', destination: 'Pune', origin_latitude: null as number | null, origin_longitude: null as number | null, destination_latitude: null as number | null, destination_longitude: null as number | null, ev_id: 'tata-nexon-ev-45', start_soc: '85', arrival_soc: '15' }
 
 export default function PlannerPage() {
   const [form, setForm] = useState(defaults)
@@ -22,6 +22,10 @@ export default function PlannerPage() {
     [`${key}_latitude`]: place?.latitude ?? null,
     [`${key}_longitude`]: place?.longitude ?? null,
   }))
+  const setSoc = (key: 'start_soc' | 'arrival_soc', value: string) => {
+    set(key, value.replace(/\D/g, '').slice(0, 3))
+    setError('')
+  }
 
   useEffect(() => {
     api<EVSpec[]>('/api/evs').then((rows) => {
@@ -42,8 +46,14 @@ export default function PlannerPage() {
   }
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError(''); setResult(null)
-    try { setResult(await api<JourneyResult>('/api/journeys/plan', { method: 'POST', body: JSON.stringify(form) })) }
+    event.preventDefault()
+    const startSoc = Number(form.start_soc)
+    const arrivalSoc = Number(form.arrival_soc)
+    if (!Number.isInteger(startSoc) || startSoc < 10 || startSoc > 100) { setError('Starting charge must be a whole number from 10% to 100%.'); return }
+    if (!Number.isInteger(arrivalSoc) || arrivalSoc < 5 || arrivalSoc > 99) { setError('Arrival reserve must be a whole number from 5% to 99%.'); return }
+    if (arrivalSoc >= startSoc) { setError('Arrival reserve must be lower than the starting charge. For example, use 100% starting charge to request a 90% arrival reserve.'); return }
+    setLoading(true); setError(''); setResult(null)
+    try { setResult(await api<JourneyResult>('/api/journeys/plan', { method: 'POST', body: JSON.stringify({ ...form, start_soc: startSoc, arrival_soc: arrivalSoc }) })) }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not plan the journey') }
     finally { setLoading(false) }
   }
@@ -57,9 +67,10 @@ export default function PlannerPage() {
         <div className="form-grid">
           <label>Manufacturer<select value={manufacturer} onChange={(event) => changeManufacturer(event.target.value)}>{manufacturers.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>EV model / variant<select value={form.ev_id} onChange={(event) => set('ev_id', event.target.value)}>{visibleEvs.map((item) => <option key={item.ev_id} value={item.ev_id}>{item.model} — {item.variant}</option>)}</select></label>
-          <label>Starting charge (%)<input type="number" min="20" max="100" value={form.start_soc} onChange={(event) => set('start_soc', +event.target.value)} /></label>
-          <label>Arrival reserve (%)<input type="number" min="5" max="40" value={form.arrival_soc} onChange={(event) => set('arrival_soc', +event.target.value)} /></label>
+          <label>Starting charge (%)<input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={3} value={form.start_soc} onChange={(event) => setSoc('start_soc', event.target.value)} placeholder="10–100" aria-describedby="charge-help" /></label>
+          <label>Arrival reserve (%)<input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} value={form.arrival_soc} onChange={(event) => setSoc('arrival_soc', event.target.value)} placeholder="5–99" aria-describedby="charge-help" /></label>
         </div>
+        <p className="form-note" id="charge-help">Type the percentages directly. Arrival reserve may be as high as 99%, but it must stay below the starting charge.</p>
         <button className="button primary wide" disabled={loading || !selectedEv}>{loading ? 'Finding routes and stations…' : <>Plan my journey <ArrowRight size={18} /></>}</button>
         <p className="form-note">Plan anywhere in India with the nationwide EV Yatra station data. Live availability and tariffs may be unavailable; confirm a charger before travel.</p>
       </form>

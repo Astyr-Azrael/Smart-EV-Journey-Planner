@@ -12,7 +12,7 @@ class PlanRequest(BaseModel):
     vehicle: str = Field(default="Custom EV", max_length=120)
     usable_range_km: float = Field(default=350, ge=60, le=1000)
     start_soc: float = Field(default=85, ge=10, le=100)
-    arrival_soc: float = Field(default=15, ge=5, le=60)
+    arrival_soc: float = Field(default=15, ge=5, le=99)
     consumption_kwh_100km: float = Field(default=17, ge=6, le=60)
     battery_kwh: float = Field(default=60, ge=10, le=250)
     connector: str | None = Field(default=None, max_length=80)

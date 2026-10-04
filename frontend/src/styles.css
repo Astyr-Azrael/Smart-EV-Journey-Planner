@@ -117,6 +117,7 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .journey-heading > p:last-child { font-size: 15px; }
 .route-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .route-option { min-height: 180px; padding: clamp(24px, 3vw, 34px); display: flex; justify-content: space-between; align-items: center; gap: 24px; background: var(--pale-soft); }
+.route-option { border-radius: 16px; }
 .route-option-primary { color: var(--pale); background: linear-gradient(135deg, var(--emerald), var(--emerald-mid)); border-color: transparent; }
 .route-option h3 { margin: 9px 0 4px; font-size: clamp(34px, 4vw, 48px); line-height: 1; }
 .route-option h3 small { font-size: .42em; letter-spacing: 0; opacity: .82; }
@@ -138,7 +139,7 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .planned-stop-marker > div { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50% 50% 50% 12px; transform: rotate(-45deg); color: var(--pale); background: var(--emerald-deep); border: 3px solid var(--pale); box-shadow: 0 4px 14px rgba(4,120,94,.4); font-size: 13px; font-weight: 800; }
 .planned-stop-marker span { transform: rotate(45deg); }
 .result-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.result-summary > div { min-height: 100px; padding: 20px; border-radius: 22px; background: var(--emerald-soft); border: 1px solid var(--line); }
+.result-summary > div { min-height: 100px; padding: 20px; border-radius: 14px; background: var(--emerald-soft); border: 1px solid var(--line); }
 .result-summary strong { font-size: 24px; }
 .journey-itinerary { display: grid; gap: 24px; }
 .itinerary-head { display: flex; justify-content: space-between; align-items: center; gap: 28px; }
