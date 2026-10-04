@@ -146,6 +146,8 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .itinerary-head h2 { margin: 7px 0 8px; font-size: clamp(28px, 3vw, 40px); }
 .itinerary-head p:last-child { margin-bottom: 0; max-width: 680px; line-height: 1.6; }
 .start-journey { flex: 0 0 auto; }
+.itinerary-actions { width: min(290px, 100%); flex: 0 0 auto; display: grid; justify-items: stretch; gap: 9px; }
+.itinerary-actions small { line-height: 1.45; text-align: center; text-transform: none; letter-spacing: 0; }
 .itinerary-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .itinerary-step { min-width: 0; padding: 16px; display: flex; gap: 12px; border-radius: 18px; background: var(--pale-soft); border: 1px solid var(--line); }
 .itinerary-step > div { min-width: 0; display: grid; align-content: start; gap: 4px; }

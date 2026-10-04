@@ -47,7 +47,10 @@ function JourneyItinerary({ result }: { result: JourneyResult }) {
     <section className="journey-itinerary glass-card">
       <div className="itinerary-head">
         <div><p className="eyebrow emerald">BATTERY-AWARE DIRECTIONS</p><h2>Your drive plan</h2><p>The route uses your starting charge, vehicle range and connector compatibility to schedule stops.</p></div>
-        {result.plan.feasible ? <a className="button primary start-journey" href={googleMapsUrl(result)} target="_blank" rel="noreferrer"><Navigation size={18} /> Start journey <ExternalLink size={16} /></a> : null}
+        <div className="itinerary-actions">
+          <a className="button primary start-journey" href={googleMapsUrl(result)} target="_blank" rel="noreferrer"><Navigation size={18} /> Start journey <ExternalLink size={16} /></a>
+          {!result.plan.feasible ? <small>Directions will open with the mapped stops above. Review the charging-coverage warning before departure.</small> : null}
+        </div>
       </div>
       {!result.plan.feasible ? <p className="plan-warning">{result.plan.reason}</p> : null}
       <div className="itinerary-track">
