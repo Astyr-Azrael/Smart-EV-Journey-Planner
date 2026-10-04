@@ -21,6 +21,7 @@ export type Station = {
   source_url: string
   fetched_at?: string
   detour_km?: number
+  distance_km?: number
   progress_km?: number
   arrival_soc?: number
   target_soc?: number

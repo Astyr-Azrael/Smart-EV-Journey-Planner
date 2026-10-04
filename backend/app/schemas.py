@@ -32,6 +32,14 @@ class PlanRequest(BaseModel):
 class CrawlRequest(BaseModel):
     place: str = Field(min_length=2, max_length=200)
     radius_km: float = Field(default=25, ge=1, le=100)
+    latitude: float | None = Field(default=None, ge=6, le=38)
+    longitude: float | None = Field(default=None, ge=68, le=98)
+
+    @model_validator(mode="after")
+    def coordinates_must_be_a_pair(self):
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("Latitude and longitude must be provided together")
+        return self
 
 
 class InspectRequest(BaseModel):

@@ -140,22 +140,41 @@ async def optional_live_stations(geometries: list[list[list[float]]], timeout_se
 
 @app.post("/api/crawl/stations")
 async def crawl_stations(payload: CrawlRequest, db: Session = Depends(get_db)):
+    place = {"name": payload.place, "latitude": payload.latitude, "longitude": payload.longitude} if payload.latitude is not None else None
     try:
-        place = await geocode(payload.place)
-        records = clean_and_merge(await fetch_stations_near(place["latitude"], place["longitude"], payload.radius_km))
+        if place is None:
+            place = await geocode(payload.place)
+        centre = (place["latitude"], place["longitude"])
+        bee_records = [station for station in load_bee_stations() if haversine_km(centre, (station["latitude"], station["longitude"])) <= payload.radius_km]
+        live_records = []
+        live_warning = None
+        if not settings.demo_mode:
+            try:
+                live_records = await asyncio.wait_for(fetch_stations_near(place["latitude"], place["longitude"], payload.radius_km), timeout=10)
+            except (TimeoutError, ExternalServiceError) as exc:
+                live_warning = str(exc)
+                logger.warning("Live nearest-station crawl unavailable; continuing with BEE data: %s", exc)
+        records = clean_and_merge([*bee_records, *live_records])
+        for station in records:
+            station["distance_km"] = round(haversine_km(centre, (station["latitude"], station["longitude"])), 1)
+        records.sort(key=lambda station: station["distance_km"])
         saved = upsert_stations(db, records)
-        db.add(CrawlRun(source="OpenStreetMap Overpass API", status="completed", records_found=saved, details={"place": place, "radius_km": payload.radius_km}))
+        sources = (["BEE EV Yatra"] if bee_records else []) + (["OpenStreetMap"] if live_records else [])
+        db.add(CrawlRun(source=" + ".join(sources) or "Nearest-station sources", status="fallback" if live_warning else "completed", records_found=saved, details={"place": place, "radius_km": payload.radius_km, "warning": live_warning}))
         db.commit()
         logger.info("Station crawl completed: %s records around %s", saved, payload.place)
-        return {"place": place, "radius_km": payload.radius_km, "records_found": saved, "stations": records}
+        return {"place": place, "radius_km": payload.radius_km, "records_found": saved, "stations": records, "station_sources": sources, "warning": live_warning}
     except ExternalServiceError as exc:
         cached = [station_dict(item) for item in db.scalars(select(Station)).all()]
-        cached = [item for item in cached if haversine_km((place["latitude"], place["longitude"]), (item["latitude"], item["longitude"])) <= payload.radius_km] if 'place' in locals() else []
+        cached = [item for item in cached if haversine_km((place["latitude"], place["longitude"]), (item["latitude"], item["longitude"])) <= payload.radius_km] if place else []
+        for station in cached:
+            station["distance_km"] = round(haversine_km((place["latitude"], place["longitude"]), (station["latitude"], station["longitude"])), 1)
+        cached.sort(key=lambda station: station["distance_km"])
         db.add(CrawlRun(source="OpenStreetMap Overpass API", status="fallback" if cached else "failed", records_found=len(cached), details={"error": str(exc), "fallback": "SQLite cache" if cached else None}))
         db.commit()
         if cached:
             logger.warning("Live station crawl failed; returning %s cached records", len(cached))
-            return {"place": place, "radius_km": payload.radius_km, "records_found": len(cached), "stations": cached, "fallback": "SQLite cache", "warning": str(exc)}
+            return {"place": place, "radius_km": payload.radius_km, "records_found": len(cached), "stations": cached, "station_sources": ["SQLite cache"], "fallback": "SQLite cache", "warning": str(exc)}
         logger.error("Station crawl failed with no cache: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

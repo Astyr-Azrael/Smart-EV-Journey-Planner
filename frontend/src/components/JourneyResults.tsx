@@ -64,7 +64,7 @@ function JourneyItinerary({ result }: { result: JourneyResult }) {
   )
 }
 
-function StationCard({ station, evName, stopNumber }: { station: Station; evName: string; stopNumber?: number }) {
+export function StationCard({ station, evName, stopNumber }: { station: Station; evName?: string; stopNumber?: number }) {
   const compatibility = station.compatible === true ? 'Confirmed' : station.compatible === false ? 'Not compatible' : 'Confirm connector'
   const sourceLabel = station.source || station.operator || 'Mapped station'
   return (
@@ -80,13 +80,13 @@ function StationCard({ station, evName, stopNumber }: { station: Station; evName
       <p className="station-address"><MapPin />{station.address || `${station.latitude.toFixed(4)}, ${station.longitude.toFixed(4)}`}</p>
       {stopNumber ? <p className="stop-callout"><Navigation />Estimated stop {stopNumber} at route km {Math.round(station.progress_km || 0)}: arrive near {station.arrival_soc}%, then charge to {station.target_soc}% in about {station.charge_minutes} min.</p> : null}
       <div className="station-facts">
-        <div><Route /><span><small>Route deviation</small><strong>{station.detour_km ?? '—'} km</strong></span></div>
+        <div><Route /><span><small>{station.distance_km !== undefined ? 'Distance away' : 'Route deviation'}</small><strong>{station.distance_km ?? station.detour_km ?? '—'} km</strong></span></div>
         <div><Gauge /><span><small>{station.power_kw ? 'Charging power' : 'Connector options'}</small><strong>{station.power_kw ? `${station.power_kw} kW` : `${station.connectors.length || 0} listed`}</strong></span></div>
-        <div><Clock3 /><span><small>{stopNumber ? 'Planned charge' : 'Estimated top-up'}</small><strong>{stopNumber ? `${station.charge_minutes} min` : station.estimated_charge_minutes ? `About ${station.estimated_charge_minutes} min` : 'Confirm with operator'}</strong></span></div>
+        {stopNumber || station.estimated_charge_minutes ? <div><Clock3 /><span><small>{stopNumber ? 'Planned charge' : 'Estimated top-up'}</small><strong>{stopNumber ? `${station.charge_minutes} min` : `About ${station.estimated_charge_minutes} min`}</strong></span></div> : null}
         <div><MapPinned /><span><small>{station.capacity ? 'Charging bays' : station.progress_km ? 'Journey position' : 'Data source'}</small><strong>{station.capacity ? station.capacity : station.progress_km ? `${Math.round(station.progress_km)} km from start` : sourceLabel}</strong></span></div>
       </div>
       <div className="station-connectors"><p><PlugZap /> Connectors</p><div className="chip-row">{station.connectors.length ? station.connectors.map((item) => <Chip key={item}>{item}</Chip>) : <Chip>Confirm with operator</Chip>}{station.effective_charge_kw ? <Chip>{station.effective_charge_kw} kW usable</Chip> : null}</div></div>
-      <p className={`compatibility compatibility-${station.compatible === true ? 'yes' : station.compatible === false ? 'no' : 'unknown'}`}><Check />Compatible with {evName}: <strong>{compatibility}</strong></p>
+      {evName ? <p className={`compatibility compatibility-${station.compatible === true ? 'yes' : station.compatible === false ? 'no' : 'unknown'}`}><Check />Compatible with {evName}: <strong>{compatibility}</strong></p> : null}
       {station.amenities?.length ? <p className="amenities">Amenities: {station.amenities.join(' • ')}</p> : null}
     </article>
   )

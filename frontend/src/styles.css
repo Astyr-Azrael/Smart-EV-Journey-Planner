@@ -160,6 +160,7 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .stations-section { display: grid; gap: 18px; padding-top: 8px; }
 .section-support { margin: 8px 0 0; font-size: 13px; opacity: .72; }
 .station-tools { padding: 16px; display: grid; grid-template-columns: minmax(240px, 1.6fr) repeat(3, minmax(150px, 1fr)) auto; gap: 12px; align-items: end; border: 1px solid var(--line); border-radius: 22px; background: var(--emerald-soft); }
+.network-station-tools { grid-template-columns: minmax(240px, 1.6fr) repeat(2, minmax(150px, 1fr)) auto; }
 .station-tools label { min-width: 0; display: grid; gap: 7px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .station-tools input, .station-tools select { min-height: 46px; background: var(--pale); font-size: 12px; letter-spacing: 0; text-transform: none; }
 .station-tools .input-icon svg { top: 13px; }
@@ -191,6 +192,8 @@ small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform
 .attribution { line-height: 1.7; text-align: center; }
 
 .network-hero { min-height: 430px; padding: clamp(30px, 5vw, 64px); display: grid; grid-template-columns: 1.1fr .9fr; gap: 45px; align-items: center; }
+.network-planner h2 { margin: 6px 0 0; font-size: clamp(30px, 3vw, 44px); }
+.network-side { justify-content: center; }
 .network-hero h2, .source-hero h2 { margin: 12px 0 18px; font-size: clamp(38px, 5vw, 62px); line-height: 1; }
 .network-hero p { line-height: 1.7; }
 .network-search { display: grid; gap: 13px; padding: 22px; color: var(--emerald-deep); background: rgba(248,255,229,.86); border-radius: 24px; }

@@ -123,7 +123,7 @@ Open <http://localhost:5173>. After dependencies are installed, Windows users ca
 | POST | `/api/journeys/plan` | Geocode, compare routes, crawl the corridor and plan charging |
 | GET | `/api/journeys` | Saved journey list |
 | GET | `/api/journeys/{id}` | Reopen a complete saved result |
-| POST | `/api/crawl/stations` | Live nearest-station search used by network mode |
+| POST | `/api/crawl/stations` | Exact-coordinate nearest-station search merging nationwide BEE data with a live OpenStreetMap crawl |
 | GET | `/api/stations` | Cached normalized stations |
 | GET | `/api/stations/export.csv` | Pandas-generated station export |
 | GET | `/api/sources` | Provider and responsible-scraping metadata |

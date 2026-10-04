@@ -3,7 +3,7 @@ from app.services.geo import build_route_profile, haversine_km, station_from_ele
 from app.services.planner import build_charge_plan
 from app.services.data_cleaner import clean_and_merge, normalize_connector, normalize_power
 from app.services.route_intelligence import annotate_route, choose_charging_friendly_route, select_display_stations
-from app.schemas import PlanRequest
+from app.schemas import CrawlRequest, PlanRequest
 from pydantic import ValidationError
 
 
@@ -168,6 +168,20 @@ def test_planner_charges_above_a_high_arrival_reserve():
     assert plan["feasible"] is True
     assert plan["stops"][0]["target_soc"] == 100
     assert plan["stops"][0]["arrival_soc"] >= 90
+
+
+def test_nearest_station_search_accepts_exact_coordinates():
+    request = CrawlRequest(place="Mysuru, Karnataka", radius_km=25, latitude=12.3052, longitude=76.6554)
+    assert request.latitude == 12.3052
+
+
+def test_nearest_station_coordinates_must_be_a_pair():
+    try:
+        CrawlRequest(place="Mysuru", latitude=12.3052)
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("Expected nearest-station coordinate pair validation error")
 
 
 def test_charging_friendly_route_prefers_reasonable_compatible_alternative():
