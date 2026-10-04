@@ -226,12 +226,13 @@ async def plan_journey(payload: PlanRequest, db: Session = Depends(get_db)):
         upsert_stations(db, route_stations)
     usable_range = max(80, ev.certified_range_km * 0.80)
     consumption = round(ev.battery_kwh / max(ev.certified_range_km, 1) * 100 * 1.15, 1)
-    plan = build_charge_plan(stations=route_stations, origin=(origin["latitude"], origin["longitude"]), destination=(destination["latitude"], destination["longitude"]), total_km=route["distance_km"], usable_range_km=usable_range, start_soc=payload.start_soc, arrival_soc=payload.arrival_soc, battery_kwh=ev.battery_kwh, consumption_kwh_100km=consumption)
+    plan = build_charge_plan(stations=route_stations, origin=(origin["latitude"], origin["longitude"]), destination=(destination["latitude"], destination["longitude"]), total_km=route["distance_km"], usable_range_km=usable_range, start_soc=payload.start_soc, arrival_soc=payload.arrival_soc, battery_kwh=ev.battery_kwh, consumption_kwh_100km=consumption, max_charge_kw=ev.max_dc_kw)
     result = {
         "origin": origin, "destination": destination, "route": route, "routes": route_choice,
         "ev": ev_dict(ev),
         "stations_considered": len(route_stations), "nearby_stations": select_display_stations(route_stations, (origin["latitude"], origin["longitude"]), stops=plan["stops"]),
         "plan": plan, "station_sources": source_names,
+        "trip_settings": {"start_soc": payload.start_soc, "arrival_soc": payload.arrival_soc, "usable_range_km": round(usable_range, 1), "consumption_kwh_100km": consumption},
         "data_freshness": datetime.now(timezone.utc).isoformat(),
         "attribution": "Routing © OSRM; charging data © Bureau of Energy Efficiency (EV Yatra), OpenStreetMap contributors and optional Open Charge Map; geocoding by Nominatim. BEE snapshot dated 26 October 2025; verify availability before travel.",
     }

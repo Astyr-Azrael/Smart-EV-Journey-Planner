@@ -20,8 +20,8 @@ export default function PlannerPage() {
   useEffect(() => {
     api<EVSpec[]>('/api/evs').then((rows) => {
       setEvs(rows)
-      const selected = rows.find((item) => item.ev_id === form.ev_id) || rows[0]
-      if (selected) { setManufacturer(selected.manufacturer); set('ev_id', selected.ev_id) }
+      const selected = rows.find((item) => item.ev_id === defaults.ev_id) || rows[0]
+      if (selected) { setManufacturer(selected.manufacturer); setForm((state) => ({ ...state, ev_id: selected.ev_id })) }
     }).catch((err) => setError(err.message))
   }, [])
 

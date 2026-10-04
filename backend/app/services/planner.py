@@ -18,6 +18,7 @@ def build_charge_plan(
     arrival_soc: float,
     battery_kwh: float,
     consumption_kwh_100km: float,
+    max_charge_kw: float | None = None,
 ) -> dict:
     start_range = usable_range_km * start_soc / 100
     reserve_range = usable_range_km * arrival_soc / 100
@@ -44,7 +45,10 @@ def build_charge_plan(
         arrival = max(5, round(100 * (remaining_reach + reserve_range - leg_km) / usable_range_km))
         target_soc = min(90, max(70, round(100 * min(leg_limit + reserve_range, usable_range_km) / usable_range_km)))
         energy = max(4.0, battery_kwh * (target_soc - arrival) / 100)
-        charge_minutes = round(energy / 60 * 60 + 8)
+        reported_power = selected.get("power_kw") or max_charge_kw or 60
+        effective_power = min(reported_power, max_charge_kw) if max_charge_kw else reported_power
+        effective_power = max(10, effective_power)
+        charge_minutes = round(energy / effective_power * 60 + 8)
         reasons = [
             "reachable before the configured reserve",
             f"only {selected.get('detour_km', 0)} km from the route",
@@ -53,7 +57,7 @@ def build_charge_plan(
             reasons.append(f"supports {', '.join(selected['connectors'][:2])}")
         if selected.get("power_kw"):
             reasons.append(f"reports up to {selected['power_kw']:g} kW")
-        stops.append({**selected, "category": "Recommended", "recommendation_reasons": reasons, "arrival_soc": arrival, "target_soc": target_soc, "charge_minutes": charge_minutes, "energy_kwh": round(energy, 1)})
+        stops.append({**selected, "category": "Planned charging stop", "recommendation_reasons": reasons, "arrival_soc": arrival, "target_soc": target_soc, "charge_minutes": charge_minutes, "energy_kwh": round(energy, 1), "effective_charge_kw": round(effective_power, 1)})
         current = selected["progress_km"]
         remaining_reach = leg_limit
         sorted_stations = [station for station in sorted_stations if station["progress_km"] > current + 8]

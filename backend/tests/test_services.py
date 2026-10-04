@@ -41,10 +41,13 @@ def test_planner_selects_progressive_stop():
         arrival_soc=15,
         battery_kwh=60,
         consumption_kwh_100km=17,
+        max_charge_kw=80,
     )
     assert plan["feasible"] is True
     assert len(plan["stops"]) == 2
     assert "reachable" in plan["stops"][0]["recommendation_reasons"][0]
+    assert plan["stops"][0]["effective_charge_kw"] == 80
+    assert plan["stops"][0]["charge_minutes"] > 8
 
 
 def test_cleaner_normalizes_and_merges_nearby_sources():
